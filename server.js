@@ -31,11 +31,12 @@ function loadDrivers() {
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
   return rows.slice(1).map(r => ({
-    key:   String(r[0] || '').trim(),
-    fio:   String(r[1] || '').trim(),
-    brand: String(r[2] || '').trim(),
-    plate: String(r[3] || '').trim(),
-    phone: String(r[4] || '').trim(),
+    key:    String(r[0] || '').trim(),
+    fio:    String(r[1] || '').trim(),
+    brand:  String(r[2] || '').trim(),
+    plate:  String(r[3] || '').trim(),
+    phone:  String(r[4] || '').trim(),
+    region: String(r[5] || 'МСК').trim() || 'МСК',
   })).filter(d => d.key);
 }
 
@@ -56,7 +57,7 @@ function todayPath() {
 }
 
 function styleHeaderRow(ws) {
-  const COLS = 4;
+  const COLS = 6;
   const row = ws.getRow(1);
   for (let c = 1; c <= COLS; c++) {
     const cell = row.getCell(c);
@@ -73,7 +74,7 @@ function styleHeaderRow(ws) {
 
 function styleDataRow(row, rowNumber) {
   const isEven = rowNumber % 2 === 0;
-  const COLS = 4;
+  const COLS = 6;
   for (let c = 1; c <= COLS; c++) {
     const cell = row.getCell(c);
     cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFD9E1F2' : 'FFFFFFFF' } };
@@ -81,7 +82,7 @@ function styleDataRow(row, rowNumber) {
       top: { style: 'thin', color: { argb: 'FFBFBFBF' } }, bottom: { style: 'thin', color: { argb: 'FFBFBFBF' } },
       left: { style: 'thin', color: { argb: 'FFBFBFBF' } }, right: { style: 'thin', color: { argb: 'FFBFBFBF' } },
     };
-    cell.alignment = { vertical: 'middle', horizontal: c === 1 ? 'left' : 'center' };
+    cell.alignment = { vertical: 'middle', horizontal: c === 6 ? 'left' : 'center' };
   }
   row.height = 18;
 }
@@ -104,21 +105,23 @@ async function appendRecord(record) {
   const ws = wb.addWorksheet('Данные');
 
   // Add header row first, then set column widths
-  ws.addRow(['ФИО', 'Дата', 'Время', 'Количество коробов']);
-  ws.getColumn(1).width = 30;
-  ws.getColumn(2).width = 14;
-  ws.getColumn(3).width = 10;
-  ws.getColumn(4).width = 22;
+  ws.addRow(['Дата', 'Время', 'Количество коробов', 'Регион', 'Номер ТС', 'Водитель']);
+  ws.getColumn(1).width = 14;
+  ws.getColumn(2).width = 10;
+  ws.getColumn(3).width = 22;
+  ws.getColumn(4).width = 10;
+  ws.getColumn(5).width = 16;
+  ws.getColumn(6).width = 32;
   styleHeaderRow(ws);
 
   // Re-add existing data rows
   existingRows.forEach(row => {
-    const newRow = ws.addRow([row[0], row[1], row[2], row[3]]);
+    const newRow = ws.addRow([row[0], row[1], row[2], row[3], row[4], row[5]]);
     styleDataRow(newRow, ws.rowCount);
   });
 
   // Add new record
-  const newRow = ws.addRow([record.fio, record.date, record.time, record.box_count]);
+  const newRow = ws.addRow([record.date, record.time, record.box_count, record.region, record.plate, record.fio]);
   styleDataRow(newRow, ws.rowCount);
 
   const buffer = await wb.xlsx.writeBuffer();
@@ -186,7 +189,7 @@ app.post('/api/submit', async (req, res) => {
 
   try {
     await ensureTodayFile();
-    const buffer = await appendRecord({ fio: driver.fio, date, time, box_count: count });
+    const buffer = await appendRecord({ fio: driver.fio, plate: driver.plate, region: driver.region, date, time, box_count: count });
 
     // Upload to YaDisk in background (don't block the response)
     yadisk.uploadFile(buffer, todayFilename()).catch(err =>

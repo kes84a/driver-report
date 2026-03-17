@@ -20,9 +20,9 @@ async function sendReport(filePath) {
   const yyyy = now.getFullYear();
   const dateStr = `${dd}.${mm}.${yyyy}`;
 
-  const totalBoxes = dataRows.reduce((s, r) => s + (parseInt(r[3]) || 0), 0);
+  const totalBoxes = dataRows.reduce((s, r) => s + (parseInt(r[2]) || 0), 0);
   const driverLines = dataRows
-    .map(r => `  • ${r[0]} — ${r[3]} коробов`)
+    .map(r => `  • ${r[5]} (${r[4]}) — ${r[2]} коробов, ${r[0]} ${r[1]}`)
     .join('\n');
 
   const text = [
