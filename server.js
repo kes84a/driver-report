@@ -90,38 +90,32 @@ function styleDataRow(row, rowNumber) {
 async function appendRecord(record) {
   const filePath = todayPath();
 
+  // Read existing data rows using XLSX (handles any xlsx format, avoids exceljs read bugs)
+  let existingRows = [];
+  if (fs.existsSync(filePath)) {
+    const existingWb = XLSX.readFile(filePath);
+    const existingWs = existingWb.Sheets[existingWb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(existingWs, { header: 1 });
+    existingRows = rows.slice(1); // skip header
+  }
+
+  // Build new workbook with exceljs (for styling)
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Данные');
 
-  ws.columns = [
-    { key: 'fio',       width: 30 },
-    { key: 'date',      width: 14 },
-    { key: 'time',      width: 10 },
-    { key: 'box_count', width: 22 },
-  ];
-
-  // Header row added manually (avoids exceljs sheetNo bug with header property)
+  // Add header row first, then set column widths
   ws.addRow(['ФИО', 'Дата', 'Время', 'Количество коробов']);
+  ws.getColumn(1).width = 30;
+  ws.getColumn(2).width = 14;
+  ws.getColumn(3).width = 10;
+  ws.getColumn(4).width = 22;
   styleHeaderRow(ws);
 
-  // Load existing data rows (skip header)
-  if (fs.existsSync(filePath)) {
-    const existing = new ExcelJS.Workbook();
-    await existing.xlsx.readFile(filePath);
-    const existingWs = existing.getWorksheet(1);
-    if (existingWs) {
-      existingWs.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return;
-        const newRow = ws.addRow([
-          row.getCell(1).value,
-          row.getCell(2).value,
-          row.getCell(3).value,
-          row.getCell(4).value,
-        ]);
-        styleDataRow(newRow, ws.rowCount);
-      });
-    }
-  }
+  // Re-add existing data rows
+  existingRows.forEach(row => {
+    const newRow = ws.addRow([row[0], row[1], row[2], row[3]]);
+    styleDataRow(newRow, ws.rowCount);
+  });
 
   // Add new record
   const newRow = ws.addRow([record.fio, record.date, record.time, record.box_count]);
