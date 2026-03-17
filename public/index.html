@@ -19,21 +19,16 @@
     <form id="form" class="card" novalidate>
 
       <div class="field">
-        <label for="fio">ФИО</label>
-        <input id="fio" type="text" inputmode="text"
-               placeholder="Иванов Иван Иванович"
-               autocomplete="name" autocorrect="off" spellcheck="false" required>
+        <label for="search">Фамилия</label>
+        <input id="search" type="text" inputmode="text"
+               placeholder="Введите фамилию"
+               autocomplete="off" autocorrect="off" spellcheck="false" required>
+        <div id="suggestions" class="suggestions" hidden></div>
       </div>
 
-<div class="row">
-        <div class="field">
-          <label for="date">Дата</label>
-          <input id="date" type="date" required>
-        </div>
-        <div class="field">
-          <label for="time">Время</label>
-          <input id="time" type="time" required>
-        </div>
+      <div id="driver-info" class="driver-info" hidden>
+        <div class="driver-name" id="driver-name"></div>
+        <div class="driver-car" id="driver-car"></div>
       </div>
 
       <div class="field">

@@ -22,6 +22,25 @@ fs.mkdirSync(path.join(DATA_DIR, 'archive'), { recursive: true });
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// ─── Drivers database ─────────────────────────────────────────────
+
+function loadDrivers() {
+  const filePath = path.join(__dirname, 'drivers.xlsx');
+  if (!fs.existsSync(filePath)) return [];
+  const wb = XLSX.readFile(filePath);
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+  return rows.slice(1).map(r => ({
+    key:   String(r[0] || '').trim(),
+    fio:   String(r[1] || '').trim(),
+    brand: String(r[2] || '').trim(),
+    plate: String(r[3] || '').trim(),
+    phone: String(r[4] || '').trim(),
+  })).filter(d => d.key);
+}
+
+const DRIVERS = loadDrivers();
+
 // ─── Helpers ──────────────────────────────────────────────────────
 
 function todayFilename() {
@@ -133,21 +152,44 @@ async function ensureTodayFile() {
 
 // ─── Routes ───────────────────────────────────────────────────────
 
+// Driver lookup by key (surname)
+app.get('/api/driver', (req, res) => {
+  const q = String(req.query.q || '').trim().toLowerCase();
+  if (!q) return res.json([]);
+  const matches = DRIVERS.filter(d => d.key.toLowerCase().includes(q));
+  res.json(matches);
+});
+
 // Driver form submission
 app.post('/api/submit', async (req, res) => {
-  const { fio, date, time, box_count } = req.body;
+  const { driver_key, box_count } = req.body;
 
-  if (!fio || !date || !time || !box_count) {
+  if (!driver_key || !box_count) {
     return res.status(400).json({ error: 'Заполните все поля' });
   }
+
+  const driver = DRIVERS.find(d => d.key.toLowerCase() === String(driver_key).trim().toLowerCase());
+  if (!driver) {
+    return res.status(400).json({ error: 'Водитель не найден в базе' });
+  }
+
   const count = parseInt(box_count);
   if (isNaN(count) || count < 1) {
-    return res.status(400).json({ error: 'Некорректное количество коробов' });
+    return res.status(400).json({ error: 'Некорректное количество коробов (не менее 1)' });
   }
+
+  const now = new Date();
+  const dd   = String(now.getDate()).padStart(2, '0');
+  const mm   = String(now.getMonth() + 1).padStart(2, '0');
+  const yyyy = now.getFullYear();
+  const hh   = String(now.getHours()).padStart(2, '0');
+  const min  = String(now.getMinutes()).padStart(2, '0');
+  const date = `${dd}.${mm}.${yyyy}`;
+  const time = `${hh}:${min}`;
 
   try {
     await ensureTodayFile();
-    const buffer = await appendRecord({ fio: fio.trim(), date, time, box_count: count });
+    const buffer = await appendRecord({ fio: driver.fio, date, time, box_count: count });
 
     // Upload to YaDisk in background (don't block the response)
     yadisk.uploadFile(buffer, todayFilename()).catch(err =>

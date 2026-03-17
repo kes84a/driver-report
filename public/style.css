@@ -83,6 +83,58 @@ input[type="number"] {
   letter-spacing: 1px;
 }
 
+/* ── Driver suggestions ── */
+.field { position: relative; }
+
+.suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0; right: 0;
+  background: #fff;
+  border: 2px solid #1976d2;
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.15);
+  z-index: 100;
+  overflow: hidden;
+}
+
+.suggest-item {
+  padding: 14px 16px;
+  font-size: 15px;
+  color: #1a1a1a;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f0f0;
+  line-height: 1.4;
+}
+.suggest-item:last-child { border-bottom: none; }
+.suggest-item:hover, .suggest-item:active { background: #e3f2fd; }
+
+.suggest-car {
+  display: block;
+  font-size: 13px;
+  color: #607d8b;
+  margin-top: 2px;
+}
+
+/* ── Driver info card ── */
+.driver-info {
+  background: #e8f5e9;
+  border: 2px solid #a5d6a7;
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 22px;
+}
+.driver-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1b5e20;
+}
+.driver-car {
+  font-size: 14px;
+  color: #388e3c;
+  margin-top: 4px;
+}
+
 /* ── Error ── */
 .err {
   background: #fff3f3;
