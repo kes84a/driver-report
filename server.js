@@ -106,8 +106,9 @@ async function appendRecord(record) {
     row.height = 18;
   });
 
-  await wb.xlsx.writeFile(filePath);
-  return await wb.xlsx.writeBuffer();
+  const buffer = await wb.xlsx.writeBuffer();
+  fs.writeFileSync(filePath, buffer);
+  return buffer;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────
