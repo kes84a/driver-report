@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#1565c0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Отчёт водителя</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="wrap">
+
+    <header class="page-header">
+      <span>🚛</span>
+      <h1>Отчёт водителя</h1>
+    </header>
+
+    <form id="form" class="card" novalidate>
+
+      <div class="field">
+        <label for="fio">ФИО</label>
+        <input id="fio" type="text" inputmode="text"
+               placeholder="Иванов Иван Иванович"
+               autocomplete="name" autocorrect="off" spellcheck="false" required>
+      </div>
+
+<div class="row">
+        <div class="field">
+          <label for="date">Дата</label>
+          <input id="date" type="date" required>
+        </div>
+        <div class="field">
+          <label for="time">Время</label>
+          <input id="time" type="time" required>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="box_count">Количество коробов</label>
+        <input id="box_count" type="number" inputmode="numeric"
+               min="1" max="9999" placeholder="0" required>
+      </div>
+
+      <p id="err" class="err" hidden></p>
+
+      <button type="submit" id="btn">Отправить</button>
+
+    </form>
+
+    <div id="ok" class="card ok-card" hidden>
+      <div class="checkmark">✓</div>
+      <p>Данные сохранены</p>
+    </div>
+
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>
