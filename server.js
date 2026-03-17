@@ -162,7 +162,7 @@ app.get('/api/driver', (req, res) => {
 
 // Driver form submission
 app.post('/api/submit', async (req, res) => {
-  const { driver_key, box_count } = req.body;
+  const { driver_key, date: dateRaw, time: timeRaw, box_count } = req.body;
 
   if (!driver_key || !box_count) {
     return res.status(400).json({ error: 'Заполните все поля' });
@@ -178,14 +178,17 @@ app.post('/api/submit', async (req, res) => {
     return res.status(400).json({ error: 'Некорректное количество коробов (не менее 1)' });
   }
 
-  const now = new Date();
-  const dd   = String(now.getDate()).padStart(2, '0');
-  const mm   = String(now.getMonth() + 1).padStart(2, '0');
-  const yyyy = now.getFullYear();
-  const hh   = String(now.getHours()).padStart(2, '0');
-  const min  = String(now.getMinutes()).padStart(2, '0');
-  const date = `${dd}.${mm}.${yyyy}`;
-  const time = `${hh}:${min}`;
+  // Use client date/time (arrival); fallback to server time
+  let date, time;
+  if (dateRaw && timeRaw) {
+    const p = String(dateRaw).split('-');
+    date = p.length === 3 ? `${p[2]}.${p[1]}.${p[0]}` : dateRaw;
+    time = timeRaw;
+  } else {
+    const now = new Date();
+    date = `${String(now.getDate()).padStart(2,'0')}.${String(now.getMonth()+1).padStart(2,'0')}.${now.getFullYear()}`;
+    time = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  }
 
   try {
     await ensureTodayFile();

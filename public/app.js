@@ -10,6 +10,16 @@ const driverInfo  = document.getElementById('driver-info');
 const driverName  = document.getElementById('driver-name');
 const driverCar   = document.getElementById('driver-car');
 
+// ── Set default date / time ───────────────────────────────────────
+function setDefaults() {
+  const now = new Date();
+  document.getElementById('date').value = now.toISOString().split('T')[0];
+  document.getElementById('time').value =
+    String(now.getHours()).padStart(2, '0') + ':' +
+    String(now.getMinutes()).padStart(2, '0');
+}
+setDefaults();
+
 let selectedDriver = null;
 let searchTimer    = null;
 
@@ -66,9 +76,13 @@ document.addEventListener('click', e => {
 form.addEventListener('submit', async e => {
   e.preventDefault();
 
+  const date      = document.getElementById('date').value;
+  const time      = document.getElementById('time').value;
   const box_count = document.getElementById('box_count').value;
 
   if (!selectedDriver) { showErr('Выберите водителя из списка'); return; }
+  if (!date)           { showErr('Укажите дату прибытия'); return; }
+  if (!time)           { showErr('Укажите время прибытия'); return; }
   if (!box_count || +box_count < 1) { showErr('Введите количество коробов (не менее 1)'); return; }
 
   hideErr();
@@ -79,7 +93,7 @@ form.addEventListener('submit', async e => {
     const res  = await fetch('/api/submit', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ driver_key: selectedDriver.key, box_count: +box_count }),
+      body:    JSON.stringify({ driver_key: selectedDriver.key, date, time, box_count: +box_count }),
     });
     const data = await res.json();
 
@@ -92,6 +106,7 @@ form.addEventListener('submit', async e => {
         form.reset();
         selectedDriver    = null;
         driverInfo.hidden = true;
+        setDefaults();
         btn.disabled    = false;
         btn.textContent = 'Отправить';
       }, 3000);
