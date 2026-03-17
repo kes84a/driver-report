@@ -36,6 +36,37 @@ function todayPath() {
   return path.join(DATA_DIR, 'today.xlsx');
 }
 
+function styleHeaderRow(ws) {
+  const COLS = 4;
+  const row = ws.getRow(1);
+  for (let c = 1; c <= COLS; c++) {
+    const cell = row.getCell(c);
+    cell.font      = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
+    cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
+    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    cell.border    = {
+      top: { style: 'thin', color: { argb: 'FF2F5496' } }, bottom: { style: 'thin', color: { argb: 'FF2F5496' } },
+      left: { style: 'thin', color: { argb: 'FF2F5496' } }, right: { style: 'thin', color: { argb: 'FF2F5496' } },
+    };
+  }
+  row.height = 22;
+}
+
+function styleDataRow(row, rowNumber) {
+  const isEven = rowNumber % 2 === 0;
+  const COLS = 4;
+  for (let c = 1; c <= COLS; c++) {
+    const cell = row.getCell(c);
+    cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFD9E1F2' : 'FFFFFFFF' } };
+    cell.border = {
+      top: { style: 'thin', color: { argb: 'FFBFBFBF' } }, bottom: { style: 'thin', color: { argb: 'FFBFBFBF' } },
+      left: { style: 'thin', color: { argb: 'FFBFBFBF' } }, right: { style: 'thin', color: { argb: 'FFBFBFBF' } },
+    };
+    cell.alignment = { vertical: 'middle', horizontal: c === 1 ? 'left' : 'center' };
+  }
+  row.height = 18;
+}
+
 // Append one record row to today.xlsx (create with headers if missing)
 async function appendRecord(record) {
   const filePath = todayPath();
@@ -43,68 +74,39 @@ async function appendRecord(record) {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Данные');
 
-  // Column definitions with widths
   ws.columns = [
-    { header: 'ФИО',                key: 'fio',       width: 30 },
-    { header: 'Дата',               key: 'date',      width: 14 },
-    { header: 'Время',              key: 'time',      width: 10 },
-    { header: 'Количество коробов', key: 'box_count', width: 22 },
+    { key: 'fio',       width: 30 },
+    { key: 'date',      width: 14 },
+    { key: 'time',      width: 10 },
+    { key: 'box_count', width: 22 },
   ];
 
-  // Load existing rows (skip header)
+  // Header row added manually (avoids exceljs sheetNo bug with header property)
+  ws.addRow(['ФИО', 'Дата', 'Время', 'Количество коробов']);
+  styleHeaderRow(ws);
+
+  // Load existing data rows (skip header)
   if (fs.existsSync(filePath)) {
     const existing = new ExcelJS.Workbook();
     await existing.xlsx.readFile(filePath);
     const existingWs = existing.getWorksheet(1);
-    existingWs.eachRow((row, rowNumber) => {
-      if (rowNumber === 1) return; // skip header
-      ws.addRow({
-        fio:       row.getCell(1).value,
-        date:      row.getCell(2).value,
-        time:      row.getCell(3).value,
-        box_count: row.getCell(4).value,
+    if (existingWs) {
+      existingWs.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return;
+        const newRow = ws.addRow([
+          row.getCell(1).value,
+          row.getCell(2).value,
+          row.getCell(3).value,
+          row.getCell(4).value,
+        ]);
+        styleDataRow(newRow, ws.rowCount);
       });
-    });
+    }
   }
 
   // Add new record
-  ws.addRow({ fio: record.fio, date: record.date, time: record.time, box_count: record.box_count });
-
-  // Style header row
-  const headerRow = ws.getRow(1);
-  headerRow.eachCell(cell => {
-    cell.font      = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
-    cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
-    cell.alignment = { vertical: 'middle', horizontal: 'center' };
-    cell.border    = {
-      top:    { style: 'thin', color: { argb: 'FF2F5496' } },
-      bottom: { style: 'thin', color: { argb: 'FF2F5496' } },
-      left:   { style: 'thin', color: { argb: 'FF2F5496' } },
-      right:  { style: 'thin', color: { argb: 'FF2F5496' } },
-    };
-  });
-  headerRow.height = 22;
-
-  // Style data rows
-  ws.eachRow((row, rowNumber) => {
-    if (rowNumber === 1) return;
-    const isEven = rowNumber % 2 === 0;
-    row.eachCell(cell => {
-      cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFD9E1F2' : 'FFFFFFFF' } };
-      cell.border = {
-        top:    { style: 'thin', color: { argb: 'FFBFBFBF' } },
-        bottom: { style: 'thin', color: { argb: 'FFBFBFBF' } },
-        left:   { style: 'thin', color: { argb: 'FFBFBFBF' } },
-        right:  { style: 'thin', color: { argb: 'FFBFBFBF' } },
-      };
-      cell.alignment = { vertical: 'middle' };
-    });
-    // Center-align date, time, boxes
-    row.getCell(2).alignment = { vertical: 'middle', horizontal: 'center' };
-    row.getCell(3).alignment = { vertical: 'middle', horizontal: 'center' };
-    row.getCell(4).alignment = { vertical: 'middle', horizontal: 'center' };
-    row.height = 18;
-  });
+  const newRow = ws.addRow([record.fio, record.date, record.time, record.box_count]);
+  styleDataRow(newRow, ws.rowCount);
 
   const buffer = await wb.xlsx.writeBuffer();
   fs.writeFileSync(filePath, buffer);
