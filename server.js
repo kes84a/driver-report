@@ -2,11 +2,12 @@
 
 require('dotenv').config();
 
-const express = require('express');
-const path    = require('path');
-const fs      = require('fs');
-const os      = require('os');
-const XLSX    = require('xlsx');
+const express  = require('express');
+const path     = require('path');
+const fs       = require('fs');
+const os       = require('os');
+const XLSX     = require('xlsx');
+const ExcelJS  = require('exceljs');
 
 const yadisk             = require('./yadisk');
 const mailer             = require('./mailer');
@@ -36,24 +37,77 @@ function todayPath() {
 }
 
 // Append one record row to today.xlsx (create with headers if missing)
-function appendRecord(record) {
+async function appendRecord(record) {
   const filePath = todayPath();
-  let rows;
 
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Данные');
+
+  // Column definitions with widths
+  ws.columns = [
+    { header: 'ФИО',                key: 'fio',       width: 30 },
+    { header: 'Дата',               key: 'date',      width: 14 },
+    { header: 'Время',              key: 'time',      width: 10 },
+    { header: 'Количество коробов', key: 'box_count', width: 22 },
+  ];
+
+  // Load existing rows (skip header)
   if (fs.existsSync(filePath)) {
-    const wb = XLSX.readFile(filePath);
-    rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
-  } else {
-    rows = [['ФИО', 'Дата', 'Время', 'Количество коробов']];
+    const existing = new ExcelJS.Workbook();
+    await existing.xlsx.readFile(filePath);
+    const existingWs = existing.getWorksheet(1);
+    existingWs.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return; // skip header
+      ws.addRow({
+        fio:       row.getCell(1).value,
+        date:      row.getCell(2).value,
+        time:      row.getCell(3).value,
+        box_count: row.getCell(4).value,
+      });
+    });
   }
 
-  rows.push([record.fio, record.date, record.time, record.box_count]);
+  // Add new record
+  ws.addRow({ fio: record.fio, date: record.date, time: record.time, box_count: record.box_count });
 
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Данные');
-  XLSX.writeFile(wb, filePath);
+  // Style header row
+  const headerRow = ws.getRow(1);
+  headerRow.eachCell(cell => {
+    cell.font      = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
+    cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
+    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    cell.border    = {
+      top:    { style: 'thin', color: { argb: 'FF2F5496' } },
+      bottom: { style: 'thin', color: { argb: 'FF2F5496' } },
+      left:   { style: 'thin', color: { argb: 'FF2F5496' } },
+      right:  { style: 'thin', color: { argb: 'FF2F5496' } },
+    };
+  });
+  headerRow.height = 22;
 
-  return Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
+  // Style data rows
+  ws.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
+    const isEven = rowNumber % 2 === 0;
+    row.eachCell(cell => {
+      cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFD9E1F2' : 'FFFFFFFF' } };
+      cell.border = {
+        top:    { style: 'thin', color: { argb: 'FFBFBFBF' } },
+        bottom: { style: 'thin', color: { argb: 'FFBFBFBF' } },
+        left:   { style: 'thin', color: { argb: 'FFBFBFBF' } },
+        right:  { style: 'thin', color: { argb: 'FFBFBFBF' } },
+      };
+      cell.alignment = { vertical: 'middle' };
+    });
+    // Center-align date, time, boxes
+    row.getCell(2).alignment = { vertical: 'middle', horizontal: 'center' };
+    row.getCell(3).alignment = { vertical: 'middle', horizontal: 'center' };
+    row.getCell(4).alignment = { vertical: 'middle', horizontal: 'center' };
+    row.height = 18;
+  });
+
+  await wb.xlsx.writeFile(filePath);
+  return await wb.xlsx.writeBuffer();
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────
@@ -90,7 +144,7 @@ app.post('/api/submit', async (req, res) => {
 
   try {
     await ensureTodayFile();
-    const buffer = appendRecord({ fio: fio.trim(), date, time, box_count: count });
+    const buffer = await appendRecord({ fio: fio.trim(), date, time, box_count: count });
 
     // Upload to YaDisk in background (don't block the response)
     yadisk.uploadFile(buffer, todayFilename()).catch(err =>
