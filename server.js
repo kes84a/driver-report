@@ -11,13 +11,13 @@ const ExcelJS  = require('exceljs');
 
 const yadisk             = require('./yadisk');
 const mailer             = require('./mailer');
-const { startScheduler, archiveToday } = require('./scheduler');
+const { startScheduler } = require('./scheduler');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
 const DATA_DIR = path.join(__dirname, 'data');
-fs.mkdirSync(path.join(DATA_DIR, 'archive'), { recursive: true });
+fs.mkdirSync(DATA_DIR, { recursive: true });
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -42,19 +42,26 @@ function loadDrivers() {
 
 const DRIVERS = loadDrivers();
 
-// ─── Helpers ──────────────────────────────────────────────────────
+// ─── File helpers ──────────────────────────────────────────────────
+// date format: DD.MM.YYYY
 
-function todayFilename() {
+function remoteFilename(date) {
+  return `Отчёт_${date}.xlsx`;
+}
+
+function localPath(date) {
+  return path.join(DATA_DIR, `report_${date}.xlsx`);
+}
+
+function serverDateDDMMYYYY() {
   const now = new Date();
   const dd   = String(now.getDate()).padStart(2, '0');
   const mm   = String(now.getMonth() + 1).padStart(2, '0');
   const yyyy = now.getFullYear();
-  return `Отчёт_${dd}.${mm}.${yyyy}.xlsx`;
+  return `${dd}.${mm}.${yyyy}`;
 }
 
-function todayPath() {
-  return path.join(DATA_DIR, 'today.xlsx');
-}
+// ─── Styling ───────────────────────────────────────────────────────
 
 function styleHeaderRow(ws) {
   const COLS = 6;
@@ -65,8 +72,10 @@ function styleHeaderRow(ws) {
     cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
     cell.alignment = { vertical: 'middle', horizontal: 'center' };
     cell.border    = {
-      top: { style: 'thin', color: { argb: 'FF2F5496' } }, bottom: { style: 'thin', color: { argb: 'FF2F5496' } },
-      left: { style: 'thin', color: { argb: 'FF2F5496' } }, right: { style: 'thin', color: { argb: 'FF2F5496' } },
+      top:    { style: 'thin', color: { argb: 'FF2F5496' } },
+      bottom: { style: 'thin', color: { argb: 'FF2F5496' } },
+      left:   { style: 'thin', color: { argb: 'FF2F5496' } },
+      right:  { style: 'thin', color: { argb: 'FF2F5496' } },
     };
   }
   row.height = 22;
@@ -79,32 +88,34 @@ function styleDataRow(row, rowNumber) {
     const cell = row.getCell(c);
     cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFD9E1F2' : 'FFFFFFFF' } };
     cell.border = {
-      top: { style: 'thin', color: { argb: 'FFBFBFBF' } }, bottom: { style: 'thin', color: { argb: 'FFBFBFBF' } },
-      left: { style: 'thin', color: { argb: 'FFBFBFBF' } }, right: { style: 'thin', color: { argb: 'FFBFBFBF' } },
+      top:    { style: 'thin', color: { argb: 'FFBFBFBF' } },
+      bottom: { style: 'thin', color: { argb: 'FFBFBFBF' } },
+      left:   { style: 'thin', color: { argb: 'FFBFBFBF' } },
+      right:  { style: 'thin', color: { argb: 'FFBFBFBF' } },
     };
     cell.alignment = { vertical: 'middle', horizontal: c === 6 ? 'left' : 'center' };
   }
   row.height = 18;
 }
 
-// Append one record row to today.xlsx (create with headers if missing)
-async function appendRecord(record) {
-  const filePath = todayPath();
+// ─── Core write function ───────────────────────────────────────────
 
-  // Read existing data rows using XLSX (handles any xlsx format, avoids exceljs read bugs)
+// Reads existing rows from a local xlsx, appends a new record, writes styled file.
+// record: { date, time, box_count, region, plate, fio }
+async function appendRecord(record) {
+  const fpath = localPath(record.date);
+
   let existingRows = [];
-  if (fs.existsSync(filePath)) {
-    const existingWb = XLSX.readFile(filePath);
+  if (fs.existsSync(fpath)) {
+    const existingWb = XLSX.readFile(fpath);
     const existingWs = existingWb.Sheets[existingWb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(existingWs, { header: 1 });
     existingRows = rows.slice(1); // skip header
   }
 
-  // Build new workbook with exceljs (for styling)
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Данные');
 
-  // Add header row first, then set column widths
   ws.addRow(['Дата', 'Время', 'Количество коробов', 'Регион', 'Номер ТС', 'Водитель']);
   ws.getColumn(1).width = 14;
   ws.getColumn(2).width = 10;
@@ -114,33 +125,30 @@ async function appendRecord(record) {
   ws.getColumn(6).width = 32;
   styleHeaderRow(ws);
 
-  // Re-add existing data rows
   existingRows.forEach(row => {
     const newRow = ws.addRow([row[0], row[1], row[2], row[3], row[4], row[5]]);
     styleDataRow(newRow, ws.rowCount);
   });
 
-  // Add new record
   const newRow = ws.addRow([record.date, record.time, record.box_count, record.region, record.plate, record.fio]);
   styleDataRow(newRow, ws.rowCount);
 
   const buffer = await wb.xlsx.writeBuffer();
-  fs.writeFileSync(filePath, buffer);
+  fs.writeFileSync(fpath, buffer);
   return buffer;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────
+// ─── Ensure file exists locally (download from YaDisk if needed) ───
 
-// If today.xlsx is missing locally (e.g. after cloud restart), restore it from YaDisk
-async function ensureTodayFile() {
-  const filePath = todayPath();
-  if (fs.existsSync(filePath)) return;
+async function ensureDateFile(date) {
+  const fpath = localPath(date);
+  if (fs.existsSync(fpath)) return;
 
   try {
-    const buffer = await yadisk.downloadFile(todayFilename());
+    const buffer = await yadisk.downloadFile(remoteFilename(date));
     if (buffer) {
-      fs.writeFileSync(filePath, buffer);
-      console.log('[Recovery] Файл восстановлен с Яндекс Диска');
+      fs.writeFileSync(fpath, buffer);
+      console.log(`[Recovery] Файл восстановлен с Яндекс Диска: ${remoteFilename(date)}`);
     }
   } catch (err) {
     console.error('[Recovery] Не удалось скачать файл:', err.message);
@@ -175,24 +183,26 @@ app.post('/api/submit', async (req, res) => {
     return res.status(400).json({ error: 'Некорректное количество коробов (не менее 1)' });
   }
 
-  // Use client date/time (arrival); fallback to server time
+  // Convert date from YYYY-MM-DD to DD.MM.YYYY; fallback to server date
   let date, time;
   if (dateRaw && timeRaw) {
     const p = String(dateRaw).split('-');
     date = p.length === 3 ? `${p[2]}.${p[1]}.${p[0]}` : dateRaw;
     time = timeRaw;
   } else {
+    date = serverDateDDMMYYYY();
     const now = new Date();
-    date = `${String(now.getDate()).padStart(2,'0')}.${String(now.getMonth()+1).padStart(2,'0')}.${now.getFullYear()}`;
     time = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
   }
 
   try {
-    await ensureTodayFile();
+    // Restore from YaDisk if local file for this date is missing
+    await ensureDateFile(date);
+
     const buffer = await appendRecord({ fio: driver.fio, plate: driver.plate, region: driver.region, date, time, box_count: count });
 
-    // Upload to YaDisk in background (don't block the response)
-    yadisk.uploadFile(buffer, todayFilename()).catch(err =>
+    // Upload to YaDisk in background
+    yadisk.uploadFile(buffer, remoteFilename(date)).catch(err =>
       console.error('[YaDisk] Ошибка загрузки:', err.message)
     );
 
@@ -202,16 +212,57 @@ app.post('/api/submit', async (req, res) => {
   }
 });
 
-// Manual send (simple admin endpoint)
+// Manual send
 app.post('/api/send', async (req, res) => {
-  const fp = todayPath();
+  const date = serverDateDDMMYYYY();
+  const fp = localPath(date);
   if (!fs.existsSync(fp)) {
     return res.status(400).json({ error: 'Нет данных за сегодня' });
   }
   try {
     const result = await mailer.sendReport(fp);
-    archiveToday();
+    fs.unlinkSync(fp);
     res.json({ success: true, message: `Отчёт отправлен (${result.count} записей, ${result.totalBoxes} коробов)` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Reformat existing file on YaDisk: download → rewrite with current styles → upload back
+app.post('/api/reformat', async (req, res) => {
+  const date = req.body.date || serverDateDDMMYYYY(); // DD.MM.YYYY
+  try {
+    await ensureDateFile(date);
+    const fpath = localPath(date);
+
+    if (!fs.existsSync(fpath)) {
+      return res.status(404).json({ error: `Файл за ${date} не найден ни локально, ни на YaDisk` });
+    }
+
+    // Read all existing rows
+    const existingWb = XLSX.readFile(fpath);
+    const existingWs = existingWb.Sheets[existingWb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(existingWs, { header: 1 });
+    const dataRows = rows.slice(1);
+
+    // Rewrite with current styling
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Данные');
+    ws.addRow(['Дата', 'Время', 'Количество коробов', 'Регион', 'Номер ТС', 'Водитель']);
+    ws.getColumn(1).width = 14; ws.getColumn(2).width = 10;
+    ws.getColumn(3).width = 22; ws.getColumn(4).width = 10;
+    ws.getColumn(5).width = 16; ws.getColumn(6).width = 32;
+    styleHeaderRow(ws);
+    dataRows.forEach(row => {
+      const newRow = ws.addRow([row[0], row[1], row[2], row[3], row[4], row[5]]);
+      styleDataRow(newRow, ws.rowCount);
+    });
+
+    const buffer = await wb.xlsx.writeBuffer();
+    fs.writeFileSync(fpath, buffer);
+    await yadisk.uploadFile(buffer, remoteFilename(date));
+
+    res.json({ success: true, message: `Переформатировано ${dataRows.length} строк за ${date}` });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

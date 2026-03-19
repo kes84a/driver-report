@@ -8,19 +8,20 @@ const yadisk = require('./yadisk');
 
 const DATA_DIR = path.join(__dirname, 'data');
 
-function archiveToday() {
-  const src = path.join(DATA_DIR, 'today.xlsx');
-  if (!fs.existsSync(src)) return;
-
+function serverDateDDMMYYYY() {
   const now = new Date();
-  const dd = String(now.getDate()).padStart(2, '0');
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd   = String(now.getDate()).padStart(2, '0');
+  const mm   = String(now.getMonth() + 1).padStart(2, '0');
   const yyyy = now.getFullYear();
-  const dest = path.join(DATA_DIR, 'archive', `${yyyy}-${mm}-${dd}.xlsx`);
+  return `${dd}.${mm}.${yyyy}`;
+}
 
-  fs.copyFileSync(src, dest);
-  fs.unlinkSync(src);
-  console.log(`[Архив] Сохранено: ${dest}`);
+function remoteFilename(date) {
+  return `Отчёт_${date}.xlsx`;
+}
+
+function localPath(date) {
+  return path.join(DATA_DIR, `report_${date}.xlsx`);
 }
 
 function startScheduler() {
@@ -30,19 +31,15 @@ function startScheduler() {
   const minute = isNaN(m) ? 0  : m;
 
   cron.schedule(`${minute} ${hour} * * *`, async () => {
-    const todayPath = path.join(DATA_DIR, 'today.xlsx');
+    const date   = serverDateDDMMYYYY();
+    const fpath  = localPath(date);
 
     // Restore from YaDisk if missing locally (e.g. after cloud restart)
-    if (!fs.existsSync(todayPath)) {
+    if (!fs.existsSync(fpath)) {
       try {
-        const now = new Date();
-        const dd = String(now.getDate()).padStart(2, '0');
-        const mm = String(now.getMonth() + 1).padStart(2, '0');
-        const yyyy = now.getFullYear();
-        const filename = `Отчёт_${dd}.${mm}.${yyyy}.xlsx`;
-        const buffer = await yadisk.downloadFile(filename);
+        const buffer = await yadisk.downloadFile(remoteFilename(date));
         if (buffer) {
-          fs.writeFileSync(todayPath, buffer);
+          fs.writeFileSync(fpath, buffer);
           console.log('[Планировщик] Файл восстановлен с Яндекс Диска');
         }
       } catch (err) {
@@ -50,15 +47,16 @@ function startScheduler() {
       }
     }
 
-    if (!fs.existsSync(todayPath)) {
+    if (!fs.existsSync(fpath)) {
       console.log('[Планировщик] Нет данных для отправки — пропуск');
       return;
     }
 
     console.log(`[Планировщик] Отправка отчёта в ${new Date().toLocaleString()}...`);
     try {
-      await mailer.sendReport(todayPath);
-      archiveToday();
+      await mailer.sendReport(fpath);
+      fs.unlinkSync(fpath); // remove local file after sending (stays on YaDisk)
+      console.log(`[Планировщик] Локальный файл удалён: ${fpath}`);
     } catch (err) {
       console.error('[Планировщик] Ошибка:', err.message);
     }
@@ -69,4 +67,4 @@ function startScheduler() {
   console.log(`Планировщик: ежедневная отправка в ${hh}:${mn}`);
 }
 
-module.exports = { startScheduler, archiveToday };
+module.exports = { startScheduler };

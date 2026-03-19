@@ -3,23 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#1565c0">
+  <meta name="theme-color" content="#991E66">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <title>Отчёт водителя</title>
+  <title>kari — Вывоз</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <div class="wrap">
 
     <header class="page-header">
-      <span>🚛</span>
-      <h1>Отчёт водителя</h1>
+      <img class="kari-logo" src="/kari-logo.svg" alt="kari">
+      <h1>Вывоз</h1>
     </header>
 
     <form id="form" class="card" novalidate>
 
+      <div class="card-title">Данные о прибытии</div>
+
       <div class="field">
-        <label for="search">Фамилия</label>
+        <label for="search">Фамилия водителя</label>
         <input id="search" type="text" inputmode="text"
                placeholder="Введите фамилию"
                autocomplete="off" autocorrect="off" spellcheck="false" required>

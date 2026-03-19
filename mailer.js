@@ -5,6 +5,11 @@ const XLSX = require('xlsx');
 const fs = require('fs');
 
 async function sendReport(filePath) {
+  if (process.env.DISABLE_EMAIL === 'true') {
+    console.log('[Email] Отправка отключена (DISABLE_EMAIL=true)');
+    return { count: 0, totalBoxes: 0 };
+  }
+
   const required = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_PASSWORD', 'EMAIL_SENDER', 'EMAIL_RECIPIENT'];
   const missing = required.filter(k => !process.env[k]);
   if (missing.length) throw new Error(`Не настроены параметры в .env: ${missing.join(', ')}`);
