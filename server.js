@@ -98,6 +98,30 @@ function styleDataRow(row, rowNumber) {
   row.height = 18;
 }
 
+function styleTotalsRow(row) {
+  const COLS = 6;
+  for (let c = 1; c <= COLS; c++) {
+    const cell = row.getCell(c);
+    cell.font      = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
+    cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF991E66' } };
+    cell.border    = {
+      top:    { style: 'medium', color: { argb: 'FF6B1547' } },
+      bottom: { style: 'medium', color: { argb: 'FF6B1547' } },
+      left:   { style: 'thin',   color: { argb: 'FF6B1547' } },
+      right:  { style: 'thin',   color: { argb: 'FF6B1547' } },
+    };
+    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+  }
+  row.height = 20;
+}
+
+function addTotalsRow(ws, dataRows) {
+  const totalBoxes   = dataRows.reduce((s, r) => s + (parseInt(r[2]) || 0), 0);
+  const totalCars    = dataRows.length;
+  const row = ws.addRow(['ИТОГО', '', totalBoxes, '', `${totalCars} маш.`, '']);
+  styleTotalsRow(row);
+}
+
 // ─── Core write function ───────────────────────────────────────────
 
 // Reads existing rows from a local xlsx, appends a new record, writes styled file.
@@ -132,6 +156,9 @@ async function appendRecord(record) {
 
   const newRow = ws.addRow([record.date, record.time, record.box_count, record.region, record.plate, record.fio]);
   styleDataRow(newRow, ws.rowCount);
+
+  const allData = [...existingRows, [record.date, record.time, record.box_count, record.region, record.plate, record.fio]];
+  addTotalsRow(ws, allData);
 
   const buffer = await wb.xlsx.writeBuffer();
   fs.writeFileSync(fpath, buffer);
@@ -257,6 +284,7 @@ app.post('/api/reformat', async (req, res) => {
       const newRow = ws.addRow([row[0], row[1], row[2], row[3], row[4], row[5]]);
       styleDataRow(newRow, ws.rowCount);
     });
+    addTotalsRow(ws, dataRows);
 
     const buffer = await wb.xlsx.writeBuffer();
     fs.writeFileSync(fpath, buffer);
